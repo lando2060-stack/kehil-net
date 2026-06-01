@@ -103,7 +103,7 @@ export const apiClient = {
       return data;
     },
 
-    register: async ({ email, password, synagogue_name = '', synagogue_city = '' }) => {
+    register: async ({ email, password, synagogue_name = '', synagogue_city = '', plan = 'free', referred_by = '' }) => {
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) throw { message: error.message };
       if (data.user) {
@@ -112,8 +112,25 @@ export const apiClient = {
           email,
           synagogue_name,
           synagogue_city,
+          plan,
+          referred_by: referred_by || null,
           credits: 10,
         });
+        // If referred, give referrer 2 credits
+        if (referred_by) {
+          const { data: referrer } = await supabase
+            .from('profiles')
+            .select('id, credits, credits_from_referrals, referral_signups')
+            .eq('referral_code', referred_by)
+            .single();
+          if (referrer) {
+            await supabase.from('profiles').update({
+              credits: (referrer.credits || 0) + 2,
+              credits_from_referrals: (referrer.credits_from_referrals || 0) + 2,
+              referral_signups: (referrer.referral_signups || 0) + 1,
+            }).eq('id', referrer.id);
+          }
+        }
       }
       return data;
     },

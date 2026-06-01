@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { base44 } from '@/api/base44Client';
+import { supabase } from '@/api/supabase';
 import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,7 @@ export default function RightPanel({
   orientation, onOrientationChange,
   canvasWidth, canvasHeight, onCanvasSizeChange,
   synagogueName,
+  sourceTemplateId, onRecordBackgroundUsage,
 }) {
   const [activeTab, setActiveTab] = useState('templates');
 
@@ -52,7 +54,7 @@ export default function RightPanel({
       {/* Content panel */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 border-r">
         {activeTab === 'templates' && <TemplatesTab onBackgroundChange={onBackgroundChange} onApplyTemplate={onApplyTemplate} />}
-        {activeTab === 'backgrounds' && <BackgroundsTab backgroundUrl={backgroundUrl} onSelect={onBackgroundChange} />}
+        {activeTab === 'backgrounds' && <BackgroundsTab backgroundUrl={backgroundUrl} onSelect={onBackgroundChange} sourceTemplateId={sourceTemplateId} onRecordUsage={onRecordBackgroundUsage} />}
         {activeTab === 'text' && (
           <TextTab onAddText={onAddText} selectedElement={selectedElement} onUpdate={onUpdateElement} onDelete={onDeleteElement} />
         )}
@@ -68,9 +70,9 @@ export default function RightPanel({
         {activeTab === 'ai' && (
           <AITab
             onAddText={onAddText}
-            onBackgroundChange={onBackgroundChange}
-            setTextElements={undefined}
             synagogueName={synagogueName}
+            selectedElement={selectedElement}
+            onUpdateElement={onUpdateElement}
           />
         )}
         {activeTab === 'synagogue' && (
@@ -163,10 +165,20 @@ function ColorsTab({ textElements, onReplaceColor, selectedElement, onUpdate }) 
 }
 
 // ── AI Writing Tab ──
-function AITab({ onAddText, onBackgroundChange, synagogueName }) {
+const AI_MODES = [
+  { id: 'generate', label: 'צור מודעה', icon: '✨' },
+  { id: 'improve', label: 'שפר טקסט', icon: '✏️' },
+  { id: 'title', label: 'כותרת חזקה', icon: '💡' },
+  { id: 'shorten', label: 'קצר', icon: '⬇️' },
+  { id: 'lengthen', label: 'הרחב', icon: '⬆️' },
+  { id: 'synagogue', label: 'סגנון ביהכ"נ', icon: '🕍' },
+];
+
+function AITab({ onAddText, synagogueName, selectedElement, onUpdateElement }) {
+  const [mode, setMode] = useState('generate');
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
+  const [result, setResult] = useState(/** @type {any} */ (null));
   const textareaRef = useRef(null);
 
   const { data: recentAnnouncements = [] } = useQuery({
@@ -175,162 +187,243 @@ function AITab({ onAddText, onBackgroundChange, synagogueName }) {
     staleTime: 60000,
   });
 
-  const handleGenerate = async () => {
-    if (!prompt.trim()) return;
-    setLoading(true);
-    setResult(null);
-    try {
-      const styleContext = recentAnnouncements
-        .filter((/** @type {any} */ a) => a.text_elements?.length)
-        .slice(0, 3)
-        .map((/** @type {any} */ a) => ({
-          title: a.title,
-          elements: a.text_elements?.slice(0, 4).map((/** @type {any} */ el) => ({
-            content: el.content, fontSize: el.fontSize, fontFamily: el.fontFamily,
-            fontWeight: el.fontWeight, color: el.color, textAlign: el.textAlign,
-          })),
-        }));
+  const selectedText = selectedElement?.content || '';
 
-      const styleContextStr = styleContext.length > 0
-        ? `\n\nסגנון המשתמש (מהמודעות הקיימות שלו):\n${JSON.stringify(styleContext, null, 2)}`
-        : '';
+  const buildPrompt = () => {
+    const styleContext = recentAnnouncements
+      .filter((/** @type {any} */ a) => a.text_elements?.length)
+      .slice(0, 3)
+      .map((/** @type {any} */ a) => ({
+        title: a.title,
+        elements: a.text_elements?.slice(0, 3).map((/** @type {any} */ el) => ({
+          content: el.content, fontSize: el.fontSize, color: el.color,
+        })),
+      }));
+    const styleStr = styleContext.length > 0
+      ? `\n\nסגנון המשתמש:\n${JSON.stringify(styleContext)}` : '';
+    const shul = synagogueName ? `\nבית הכנסת: ${synagogueName}` : '';
 
-      const aiResult = await base44.integrations.Core.InvokeLLM({
-        prompt: `אתה עוזר ליצירת מודעות לבית כנסת. צור מודעה לפי הבקשה הבאה.${styleContextStr}
+    if (mode === 'generate') {
+      return `אתה עוזר ליצירת מודעות לבית כנסת.${shul}${styleStr}
 
 בקשה: ${prompt}
 
-החזר JSON עם השדות הבאים:
-- title: שם/כותרת קצרה למודעה
-- text_elements: מערך של אלמנטי טקסט, כל אחד עם: id (ייחודי), content (תוכן עברי), x, y (מיקום בתוך קנבס 595x842), width, fontSize, fontFamily (Heebo או Frank Ruhl Libre), fontWeight (700/400), color (hex), textAlign (right/center/left), lineHeight (1.2-1.6)
+החזר JSON:
+- title: כותרת קצרה
+- text_elements: מערך של אלמנטים, כל אחד: id, content (עברית), x, y, width, fontSize, fontFamily (Heebo/Frank Ruhl Libre), fontWeight (700/400), color (hex), textAlign (right/center), lineHeight
+כותרת ראשית: fontSize 36-48, fontWeight 700, Frank Ruhl Libre, y≈120
+טקסט גוף: fontSize 15-18, fontWeight 400, Heebo, y≈280
+מרכז הקנבס: x≈100-150, width≈300-420
+כתוב בעברית מכובדת לבית כנסת.`;
+    }
+    if (mode === 'improve') {
+      return `שפר את הטקסט הבא למודעה בבית כנסת. שמור על המשמעות אך שפר את הניסוח, השטף והנוכחות.${shul}
+טקסט מקורי: "${selectedText || prompt}"
+החזר JSON: { "improved_text": "הטקסט המשופר" }`;
+    }
+    if (mode === 'title') {
+      return `צור כותרת חזקה ומשפיעה לבית כנסת.${shul}
+נושא: ${prompt || selectedText}
+החזר JSON: { "titles": ["כותרת 1", "כותרת 2", "כותרת 3"] }`;
+    }
+    if (mode === 'shorten') {
+      return `קצר את הטקסט הבא לגרסה תמציתית וחזקה יותר (חצי האורך לכל היותר):
+"${selectedText || prompt}"
+החזר JSON: { "shortened": "הטקסט המקוצר" }`;
+    }
+    if (mode === 'lengthen') {
+      return `הרחב את הטקסט הבא לגרסה מפורטת ועשירה יותר (כפולה בערך):
+"${selectedText || prompt}"
+${shul}
+החזר JSON: { "lengthened": "הטקסט המורחב" }`;
+    }
+    if (mode === 'synagogue') {
+      return `התאם את הטקסט הבא לסגנון מכובד, רשמי ויפה לבית כנסת:${shul}
+טקסט: "${selectedText || prompt}"
+החזר JSON: { "adapted": "הטקסט המותאם" }`;
+    }
+    return '';
+  };
 
-הנחיות:
-- כותרת ראשית: fontSize 32-48, fontWeight 700, Frank Ruhl Libre
-- טקסט משנה: fontSize 18-24, fontWeight 600
-- גוף: fontSize 14-18, fontWeight 400, Heebo
-- השתמש בצבעים של סגנון המשתמש אם קיים, אחרת #1a365d לכותרות
-- מקם אלמנטים במרכז הקנבס (x בין 80-150, width בין 300-440)
-- כתוב בעברית תקינה ומכובדת לבית כנסת`,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            title: { type: 'string' },
-            text_elements: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  content: { type: 'string' },
-                  x: { type: 'number' },
-                  y: { type: 'number' },
-                  width: { type: 'number' },
-                  fontSize: { type: 'number' },
-                  fontFamily: { type: 'string' },
-                  fontWeight: { type: 'string' },
-                  color: { type: 'string' },
-                  textAlign: { type: 'string' },
-                  lineHeight: { type: 'number' },
-                },
-              },
-            },
-          },
-        },
-      });
+  const handleGenerate = async () => {
+    const needsPrompt = (mode === 'generate' || mode === 'title') && !prompt.trim();
+    const needsSelection = ['improve', 'shorten', 'lengthen', 'synagogue'].includes(mode) && !selectedText && !prompt.trim();
+    if (needsPrompt || needsSelection) return;
 
+    setLoading(true);
+    setResult(null);
+    try {
+      const aiResult = await base44.integrations.Core.InvokeLLM({ prompt: buildPrompt() });
       const typed = /** @type {any} */ (aiResult);
-      if (typed?.text_elements?.length) {
-        setResult(typed);
+
+      if (mode === 'generate' && typed?.text_elements?.length) {
+        setResult({ type: 'elements', data: typed });
+      } else if (mode === 'improve' && typed?.improved_text) {
+        setResult({ type: 'text', label: 'טקסט משופר', value: typed.improved_text });
+      } else if (mode === 'title' && typed?.titles?.length) {
+        setResult({ type: 'list', label: 'כותרות מוצעות', items: typed.titles });
+      } else if (mode === 'shorten' && typed?.shortened) {
+        setResult({ type: 'text', label: 'טקסט מקוצר', value: typed.shortened });
+      } else if (mode === 'lengthen' && typed?.lengthened) {
+        setResult({ type: 'text', label: 'טקסט מורחב', value: typed.lengthened });
+      } else if (mode === 'synagogue' && typed?.adapted) {
+        setResult({ type: 'text', label: 'טקסט מותאם', value: typed.adapted });
       } else {
-        setResult({ error: 'לא הצלחנו לייצר תוכן. נסה לתאר בצורה מפורטת יותר.' });
+        setResult({ type: 'error', value: 'לא הצלחנו לייצר תוכן. נסה שנית.' });
       }
     } catch {
-      setResult({ error: 'שגיאה בחיבור לAI. נסה שוב.' });
+      setResult({ type: 'error', value: 'שגיאה בחיבור ל-AI. נסה שוב.' });
     } finally {
       setLoading(false);
     }
   };
 
-  const applyResult = () => {
-    if (!result?.text_elements) return;
-    result.text_elements.forEach((/** @type {any} */ el) => {
-      onAddText({
-        content: el.content,
-        fontSize: el.fontSize,
-        fontFamily: el.fontFamily,
-        fontWeight: el.fontWeight,
-        color: el.color,
-        textAlign: el.textAlign,
-        lineHeight: el.lineHeight,
-        x: el.x,
-        y: el.y,
-        width: el.width,
-      });
-    });
-    setResult(null);
-    setPrompt('');
+  const applyElements = () => {
+    if (!result?.data?.text_elements) return;
+    result.data.text_elements.forEach((/** @type {any} */ el) => onAddText({
+      content: el.content, fontSize: el.fontSize, fontFamily: el.fontFamily,
+      fontWeight: el.fontWeight, color: el.color, textAlign: el.textAlign,
+      lineHeight: el.lineHeight, x: el.x, y: el.y, width: el.width,
+    }));
+    setResult(null); setPrompt('');
   };
+
+  const applyTextToSelected = (text) => {
+    if (selectedElement && onUpdateElement) {
+      onUpdateElement(selectedElement.id, { content: text });
+    } else {
+      onAddText({ content: text, fontSize: 18, fontFamily: 'Heebo', fontWeight: '400', color: '#1a365d', textAlign: 'center' });
+    }
+    setResult(null); setPrompt('');
+  };
+
+  const modesNeedingSelection = ['improve', 'shorten', 'lengthen', 'synagogue'];
+  const currentNeedsSelection = modesNeedingSelection.includes(mode);
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden" dir="rtl">
       <div className="p-3 border-b bg-gradient-to-b from-primary/5 to-transparent">
         <div className="flex items-center gap-2 mb-1">
           <Sparkles className="w-4 h-4 text-primary" />
-          <p className="text-sm font-semibold">כתיבה בעזרת AI</p>
+          <p className="text-sm font-semibold">עריכה בעזרת AI</p>
         </div>
-        <p className="text-[10px] text-muted-foreground">ה-AI לומד מסגנון המודעות הקיימות שלך</p>
+        <p className="text-[10px] text-muted-foreground">6 אפשרויות AI לשיפור המודעה</p>
+      </div>
+
+      {/* Mode tabs */}
+      <div className="grid grid-cols-3 gap-1 p-2 border-b">
+        {AI_MODES.map(m => (
+          <button
+            key={m.id}
+            onClick={() => { setMode(m.id); setResult(null); }}
+            className={cn(
+              'flex flex-col items-center gap-0.5 py-1.5 px-1 rounded-lg text-[10px] font-medium transition-colors',
+              mode === m.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+            )}
+          >
+            <span className="text-sm leading-none">{m.icon}</span>
+            {m.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        <div>
-          <p className="text-xs text-muted-foreground mb-1.5">תאר את המודעה שתרצה:</p>
-          <textarea
-            ref={textareaRef}
-            value={prompt}
-            onChange={e => setPrompt(e.target.value)}
-            placeholder={`לדוגמה:\n"הזמנה לשיעור תורה בכל יום שישי בשעה 7 בבוקר"\n"אזכרה לרב משה כהן ז׳ל ביום שלישי הקרוב"\n"ברכה לרגל חג הפסח"`}
-            className="w-full h-28 text-xs border border-border rounded-lg p-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary bg-white"
-            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleGenerate(); }}
-          />
-          <p className="text-[10px] text-muted-foreground mt-1">Ctrl+Enter לשליחה</p>
-        </div>
+        {/* Selected element indicator */}
+        {currentNeedsSelection && (
+          <div className={cn(
+            'rounded-lg px-3 py-2 text-xs',
+            selectedElement ? 'bg-blue-50 border border-blue-200 text-blue-700' : 'bg-amber-50 border border-amber-200 text-amber-700'
+          )}>
+            {selectedElement
+              ? `✓ טקסט נבחר: "${selectedText.slice(0, 30)}${selectedText.length > 30 ? '…' : ''}"`
+              : 'בחר אלמנט טקסט בקנבס, או הכנס טקסט ידנית למטה'}
+          </div>
+        )}
+
+        {/* Prompt input */}
+        {(mode === 'generate' || mode === 'title' || !selectedElement) && (
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">
+              {mode === 'generate' ? 'תאר את המודעה:' :
+               mode === 'title' ? 'נושא לכותרת:' : 'טקסט לעריכה:'}
+            </p>
+            <textarea
+              ref={textareaRef}
+              value={prompt}
+              onChange={e => setPrompt(e.target.value)}
+              placeholder={
+                mode === 'generate' ? 'לדוגמה: "הזמנה לשיעור תורה יום שישי 7:00"' :
+                mode === 'title' ? 'לדוגמה: "שמירת שקט בתפילה"' :
+                'הכנס כאן את הטקסט לעריכה...'
+              }
+              className="w-full h-20 text-xs border border-border rounded-lg p-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+              onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleGenerate(); }}
+            />
+          </div>
+        )}
 
         <Button
           onClick={handleGenerate}
-          disabled={!prompt.trim() || loading}
+          disabled={loading || (currentNeedsSelection && !selectedElement && !prompt.trim()) || ((mode === 'generate' || mode === 'title') && !prompt.trim())}
           className="w-full bg-primary text-primary-foreground gap-2"
+          size="sm"
         >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-          {loading ? 'יוצר מודעה...' : 'צור מודעה'}
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+          {loading ? 'מעבד...' : AI_MODES.find(m => m.id === mode)?.label}
         </Button>
 
-        {/* Result */}
-        {result && !result.error && (
+        {/* Results */}
+        {result?.type === 'elements' && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-2">
             <p className="text-xs font-semibold text-green-800">✓ המודעה נוצרה!</p>
             <div className="space-y-1">
-              {result.text_elements?.slice(0, 4).map((/** @type {any} */ el, i) => (
+              {result.data.text_elements?.slice(0, 4).map((/** @type {any} */ el, i) => (
                 <div key={i} className="text-[10px] bg-white rounded-lg px-2 py-1.5 border border-green-100">
                   <span className="text-muted-foreground">{el.fontSize}px · </span>
-                  <span className="font-medium text-foreground">{el.content?.slice(0, 40)}{el.content?.length > 40 ? '…' : ''}</span>
+                  <span className="font-medium">{el.content?.slice(0, 35)}{el.content?.length > 35 ? '…' : ''}</span>
                 </div>
               ))}
             </div>
-            <Button onClick={applyResult} className="w-full h-8 text-xs bg-green-600 hover:bg-green-700 text-white gap-1.5">
-              <Plus className="w-3.5 h-3.5" />
-              הוסף לקנבס
+            <Button onClick={applyElements} className="w-full h-8 text-xs bg-green-600 hover:bg-green-700 text-white gap-1.5" size="sm">
+              <Plus className="w-3.5 h-3.5" /> הוסף לקנבס
             </Button>
           </div>
         )}
 
-        {result?.error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-3">
-            <p className="text-xs text-red-700">{result.error}</p>
+        {result?.type === 'text' && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
+            <p className="text-xs font-semibold text-blue-800">{result.label}</p>
+            <p className="text-xs bg-white rounded-lg p-2 border border-blue-100 leading-relaxed whitespace-pre-wrap">{result.value}</p>
+            <Button onClick={() => applyTextToSelected(result.value)} className="w-full h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white gap-1.5" size="sm">
+              <Check className="w-3.5 h-3.5" /> {selectedElement ? 'החלף טקסט נבחר' : 'הוסף לקנבס'}
+            </Button>
           </div>
         )}
 
-        {/* Style context indicator */}
-        {recentAnnouncements.length > 0 && (
+        {result?.type === 'list' && (
+          <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 space-y-2">
+            <p className="text-xs font-semibold text-purple-800">{result.label}</p>
+            <div className="space-y-1.5">
+              {result.items?.map((item, i) => (
+                <button
+                  key={i}
+                  onClick={() => applyTextToSelected(item)}
+                  className="w-full text-right text-xs bg-white rounded-lg px-3 py-2 border border-purple-100 hover:border-purple-300 hover:bg-purple-50 transition-colors"
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {result?.type === 'error' && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+            <p className="text-xs text-red-700">{result.value}</p>
+          </div>
+        )}
+
+        {recentAnnouncements.length > 0 && mode === 'generate' && (
           <div className="bg-muted/50 rounded-lg p-2.5 border border-border/50">
             <p className="text-[10px] text-muted-foreground">
               <span className="font-medium">סגנון נלמד מ: </span>
@@ -660,19 +753,58 @@ function TemplatesTab({ onBackgroundChange, onApplyTemplate }) {
 }
 
 // ── Backgrounds Tab ──
-function BackgroundsTab({ backgroundUrl, onSelect }) {
+function BackgroundsTab({ backgroundUrl, onSelect, sourceTemplateId, onRecordUsage }) {
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('הכל');
   const [gridSize, setGridSize] = useState(2);
+
   const { data: categories = [] } = useQuery({ queryKey: ['bg-categories'], queryFn: () => base44.entities.BackgroundCategory.list('order', 50) });
   const { data: backgrounds = [], isLoading } = useQuery({ queryKey: ['backgrounds-picker'], queryFn: () => base44.entities.Background.list('-created_date', 200) });
+
+  // Recommended backgrounds based on template usage
+  const { data: usageRows = [] } = useQuery({
+    queryKey: ['template-bg-usage', sourceTemplateId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('template_background_usage')
+        .select('background_id, used_count')
+        .eq('template_id', sourceTemplateId)
+        .order('used_count', { ascending: false })
+        .limit(6);
+      return data || [];
+    },
+    enabled: !!sourceTemplateId,
+  });
+
+  const recommendedIds = new Set((usageRows || []).map((/** @type {any} */ r) => r.background_id));
+  const recommended = (backgrounds || []).filter((/** @type {any} */ bg) => recommendedIds.has(bg.id));
+
   const allCats = ['הכל', ...categories.map((/** @type {any} */ c) => c.name)];
   const q = search.trim().toLowerCase();
-  const filtered = backgrounds.filter((/** @type {any} */ bg) => {
+  const filtered = (backgrounds || []).filter((/** @type {any} */ bg) => {
     if (q && !bg.name?.toLowerCase().includes(q)) return false;
     if (activeCategory !== 'הכל' && !bg.categories?.includes(activeCategory)) return false;
     return true;
   });
+
+  const handleSelect = (/** @type {any} */ bg) => {
+    const newUrl = backgroundUrl === bg.image_url ? '' : bg.image_url;
+    onSelect(newUrl);
+    if (newUrl && onRecordUsage) onRecordUsage(bg.id);
+  };
+
+  const BgGrid = ({ items }) => (
+    <div className={cn('grid gap-2', gridSize === 1 ? 'grid-cols-1' : gridSize === 2 ? 'grid-cols-2' : 'grid-cols-3')}>
+      {items.map((/** @type {any} */ bg) => (
+        <button key={bg.id} onClick={() => handleSelect(bg)} className={cn('relative rounded-lg overflow-hidden border-2 transition-all', backgroundUrl === bg.image_url ? 'border-primary shadow-md' : 'border-transparent hover:border-border')}>
+          <div className={cn(gridSize === 1 ? 'aspect-[3/4]' : 'aspect-[2/3]')}><img src={bg.image_url} alt={bg.name} className="w-full h-full object-cover" /></div>
+          {backgroundUrl === bg.image_url && <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-primary flex items-center justify-center"><Check className="w-3 h-3 text-primary-foreground" /></div>}
+          <p className="text-[10px] text-center p-1.5 truncate">{bg.name}</p>
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <div className="p-2 border-b"><div className="relative"><Search className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" /><Input placeholder="חפש רקעים..." value={search} onChange={e => setSearch(e.target.value)} className="pr-7 h-8 text-xs" /></div></div>
@@ -680,18 +812,31 @@ function BackgroundsTab({ backgroundUrl, onSelect }) {
         {allCats.map(cat => (<button key={cat} onClick={() => setActiveCategory(cat)} className={cn('px-2.5 py-1 rounded-full text-[10px] whitespace-nowrap flex-shrink-0 transition-colors', activeCategory === cat ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80')}>{cat}</button>))}
       </div>
       <GridSizeControl value={gridSize} onChange={setGridSize} />
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
-        {isLoading ? <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-          : filtered.length === 0 ? <p className="text-center text-xs text-muted-foreground py-6">אין רקעים</p>
-          : <div className={cn('grid gap-2', gridSize === 1 ? 'grid-cols-1' : gridSize === 2 ? 'grid-cols-2' : 'grid-cols-3')}>
-            {filtered.map((/** @type {any} */ bg) => (
-              <button key={bg.id} onClick={() => onSelect(backgroundUrl === bg.image_url ? '' : bg.image_url)} className={cn('relative rounded-lg overflow-hidden border-2 transition-all', backgroundUrl === bg.image_url ? 'border-primary shadow-md' : 'border-transparent hover:border-border')}>
-                <div className={cn(gridSize === 1 ? 'aspect-[3/4]' : 'aspect-[2/3]')}><img src={bg.image_url} alt={bg.name} className="w-full h-full object-cover" /></div>
-                {backgroundUrl === bg.image_url && <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-primary flex items-center justify-center"><Check className="w-3 h-3 text-primary-foreground" /></div>}
-                <p className="text-[10px] text-center p-1.5 truncate">{bg.name}</p>
-              </button>
-            ))}
-          </div>}
+      <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-3">
+        {/* Recommended section */}
+        {recommended.length > 0 && !q && (
+          <div>
+            <p className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded-lg mb-2 flex items-center gap-1">
+              ⭐ מומלצים לתבנית זו
+            </p>
+            <BgGrid items={recommended} />
+          </div>
+        )}
+
+        {/* All backgrounds */}
+        {isLoading
+          ? <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+          : filtered.length === 0
+            ? <p className="text-center text-xs text-muted-foreground py-6">אין רקעים</p>
+            : (
+              <div>
+                {recommended.length > 0 && !q && (
+                  <p className="text-[10px] text-muted-foreground mb-2 px-1">כל הרקעים</p>
+                )}
+                <BgGrid items={filtered} />
+              </div>
+            )
+        }
       </div>
     </div>
   );

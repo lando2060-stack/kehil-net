@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
+import { supabase } from '@/api/supabase';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -21,6 +22,21 @@ const DEFAULT_TEXT_ELEMENTS = [
   { id: 'body', content: 'תוכן המודעה...', x: 80, y: 300, width: 440, fontSize: 16, fontFamily: 'Heebo', fontWeight: '400', color: '#4a5568', textAlign: 'center', lineHeight: 1.6 },
 ];
 
+// Calculates how different the current elements are from the source template (0–1)
+function calcTemplateChange(original, current) {
+  const orig = original || [];
+  const cur = current || [];
+  const origText = orig.map(e => e.content || '').join(' ');
+  const curText = cur.map(e => e.content || '').join(' ');
+  const origWords = origText.split(/\s+/).filter(Boolean);
+  const curWords = new Set(curText.split(/\s+/).filter(Boolean));
+  if (origWords.length === 0) return cur.length > 0 ? 1 : 0;
+  const unchanged = origWords.filter(w => curWords.has(w)).length;
+  const textChange = 1 - unchanged / origWords.length;
+  const countChange = Math.abs(cur.length - orig.length) / Math.max(orig.length, 1);
+  return Math.max(textChange, countChange);
+}
+
 export default function CreateAnnouncement() {
   const navigate = useNavigate();
   const params = new URLSearchParams(window.location.search);
@@ -40,6 +56,7 @@ export default function CreateAnnouncement() {
   const [isDirty, setIsDirty] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [credits, setCredits] = useState(/** @type {number|null} */ (null));
+  const [sourceTemplate, setSourceTemplate] = useState(/** @type {any} */ (null));
 
   useEffect(() => {
     base44.auth.me().then(u => {
@@ -411,7 +428,24 @@ export default function CreateAnnouncement() {
             onPublish={() => handleSave(false)}
             onSaveTemplate={async (name, isPublic) => {
               await base44.entities.Template.create({ name, background_url: backgroundUrl, text_elements: textElements, is_shared: isPublic });
-              toast.success('נשמר כתבנית!');
+              // Check 20% change threshold for credit
+              if (isPublic && sourceTemplate) {
+                const changePercent = calcTemplateChange(sourceTemplate.text_elements, textElements);
+                if (changePercent >= 0.2) {
+                  try {
+                    const me = await base44.auth.me();
+                    await base44.auth.updateMe({
+                      credits: (me?.credits ?? 0) + 1,
+                      credits_from_shares: (me?.credits_from_shares ?? 0) + 1,
+                    });
+                    toast.success('נשמר כתבנית! קיבלת קרדיט על שינוי משמעותי (20%+) 🎉');
+                  } catch { toast.success('נשמר כתבנית!'); }
+                } else {
+                  toast.success('נשמר כתבנית! (פחות מ-20% שינוי — לא הושג קרדיט)');
+                }
+              } else {
+                toast.success('נשמר כתבנית!');
+              }
             }}
           />
         </div>
@@ -483,6 +517,7 @@ export default function CreateAnnouncement() {
                 setTextElements(template.text_elements);
                 pushHistory(template.text_elements);
               }
+              setSourceTemplate(template);
             }}
             selectedElement={selectedElement}
             onUpdateElement={handleUpdateElement}
@@ -495,6 +530,26 @@ export default function CreateAnnouncement() {
             canvasHeight={canvasHeight}
             onCanvasSizeChange={(/** @type {number} */ w, /** @type {number} */ h) => { setCanvasWidth(w); setCanvasHeight(h); setIsDirty(true); }}
             synagogueName={synagogueName}
+            sourceTemplateId={sourceTemplate?.id}
+            onRecordBackgroundUsage={async (/** @type {string} */ bgId) => {
+              if (!sourceTemplate?.id || !bgId) return;
+              try {
+                const { data: existing } = await supabase
+                  .from('template_background_usage')
+                  .select('id, used_count')
+                  .eq('template_id', sourceTemplate.id)
+                  .eq('background_id', bgId)
+                  .single();
+                if (existing) {
+                  await supabase.from('template_background_usage')
+                    .update({ used_count: (existing.used_count || 1) + 1 })
+                    .eq('id', existing.id);
+                } else {
+                  await supabase.from('template_background_usage')
+                    .insert({ template_id: sourceTemplate.id, background_id: bgId, used_count: 1 });
+                }
+              } catch {}
+            }}
           />
         </div>
       </div>

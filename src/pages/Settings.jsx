@@ -6,9 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, Loader2, Save, MapPin, Clock, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Upload, Loader2, Save, MapPin, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
-import PrayerTimesSettings from '@/components/settings/PrayerTimesSettings';
 
 const TIMEZONES = [
   { value: 'Asia/Jerusalem', label: 'ירושלים (UTC+2/+3)' },
@@ -18,12 +17,6 @@ const TIMEZONES = [
   { value: 'Europe/London', label: 'לונדון (UTC+0/+1)' },
   { value: 'Europe/Paris', label: 'פריז (UTC+1/+2)' },
   { value: 'Australia/Sydney', label: 'סידני (UTC+10/+11)' },
-];
-
-const CALC_METHODS = [
-  { value: 'GRA', label: 'גר"א / בעל התניא' },
-  { value: 'MGA', label: 'מג"א (72 דקות)' },
-  { value: 'FIXED_LOCAL', label: 'שעות קבועות (מנהג מקומי)' },
 ];
 
 export default function Settings() {
@@ -36,11 +29,7 @@ export default function Settings() {
 
   const [city, setCity] = useState('');
   const [timezone, setTimezone] = useState('Asia/Jerusalem');
-  const [calcMethod, setCalcMethod] = useState('GRA');
   const [savingLocation, setSavingLocation] = useState(false);
-
-  const [prayerTimes, setPrayerTimes] = useState([]);
-  const [savingPrayers, setSavingPrayers] = useState(false);
 
   useEffect(() => {
     base44.auth.me().then(user => {
@@ -48,8 +37,6 @@ export default function Settings() {
       setLogoUrl(user?.logo_url || '');
       setCity(user?.synagogue_city || '');
       setTimezone(user?.synagogue_timezone || 'Asia/Jerusalem');
-      setCalcMethod(user?.prayer_calculation_method || 'GRA');
-      setPrayerTimes(user?.prayer_times || []);
     }).catch(() => {});
   }, []);
 
@@ -83,7 +70,7 @@ export default function Settings() {
   const saveLocation = async () => {
     setSavingLocation(true);
     try {
-      await base44.auth.updateMe({ synagogue_city: city, synagogue_timezone: timezone, prayer_calculation_method: calcMethod });
+      await base44.auth.updateMe({ synagogue_city: city, synagogue_timezone: timezone });
       toast.success('הגדרות מיקום נשמרו');
     } catch {
       toast.error('שגיאה בשמירה');
@@ -92,20 +79,8 @@ export default function Settings() {
     }
   };
 
-  const savePrayers = async () => {
-    setSavingPrayers(true);
-    try {
-      await base44.auth.updateMe({ prayer_times: prayerTimes });
-      toast.success('זמני תפילות נשמרו');
-    } catch {
-      toast.error('שגיאה בשמירה');
-    } finally {
-      setSavingPrayers(false);
-    }
-  };
-
   return (
-    <div className="p-6 lg:p-10 max-w-2xl mx-auto space-y-6 pb-20">
+    <div className="p-6 lg:p-10 max-w-2xl mx-auto space-y-6 pb-20" dir="rtl">
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => navigate(-1)} className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
           <ArrowRight className="w-4 h-4 text-muted-foreground" />
@@ -147,14 +122,14 @@ export default function Settings() {
         </CardFooter>
       </Card>
 
-      {/* Location & Zmanim */}
+      {/* Location */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <MapPin className="w-5 h-5 text-primary" />
-            זמני בית הכנסת
+            מיקום בית הכנסת
           </CardTitle>
-          <p className="text-sm text-muted-foreground">הגדרות מיקום לחישוב זמנים הלכתיים אוטומטי</p>
+          <p className="text-sm text-muted-foreground">עיר ואזור זמן לשימוש במערכת</p>
         </CardHeader>
         <CardContent className="space-y-5">
           <div>
@@ -170,39 +145,10 @@ export default function Settings() {
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label>שיטת חישוב זמנים</Label>
-            <Select value={calcMethod} onValueChange={setCalcMethod}>
-              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {CALC_METHODS.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
         </CardContent>
         <CardFooter className="border-t pt-4">
           <Button onClick={saveLocation} disabled={savingLocation} className="bg-secondary text-secondary-foreground hover:bg-secondary/90 gap-2 mr-auto">
             {savingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            שמור
-          </Button>
-        </CardFooter>
-      </Card>
-
-      {/* Prayer Times */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Clock className="w-5 h-5 text-primary" />
-            זמני תפילות
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">הגדירו שעות קבועות או זמנים יחסיים לזמנים הלכתיים</p>
-        </CardHeader>
-        <CardContent>
-          <PrayerTimesSettings prayerTimes={prayerTimes} onChange={setPrayerTimes} />
-        </CardContent>
-        <CardFooter className="border-t pt-4">
-          <Button onClick={savePrayers} disabled={savingPrayers} className="bg-secondary text-secondary-foreground hover:bg-secondary/90 gap-2 mr-auto">
-            {savingPrayers ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             שמור
           </Button>
         </CardFooter>

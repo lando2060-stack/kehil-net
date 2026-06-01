@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, FolderOpen, Upload, Settings, ChevronLeft, Image, FileText, Shield } from 'lucide-react';
+import { Plus, FolderOpen, Upload, Settings, ChevronLeft, Image, FileText, Shield, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import AnnouncementPreview from '@/components/AnnouncementPreview';
 import AnnouncementCard from '@/components/AnnouncementCard';
+import ReadyMadeAnnouncements from '@/components/ReadyMadeAnnouncements';
 
 const QUICK_ACTIONS = [
   { id: 'create', label: 'יצירת מודעה', icon: Plus, href: '/create', color: 'bg-primary text-primary-foreground' },
@@ -64,9 +65,14 @@ export default function Home() {
           </h1>
           <p className="text-xs text-muted-foreground">ברוכים הבאים</p>
         </div>
-        <Link to="/settings" className="w-9 h-9 rounded-lg border border-border bg-muted/50 flex items-center justify-center hover:bg-muted transition-colors">
-          <Settings className="w-4 h-4 text-muted-foreground" />
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link to="/profile" className="w-9 h-9 rounded-lg border border-border bg-muted/50 flex items-center justify-center hover:bg-muted transition-colors" title="האזור האישי">
+            <User className="w-4 h-4 text-muted-foreground" />
+          </Link>
+          <Link to="/settings" className="w-9 h-9 rounded-lg border border-border bg-muted/50 flex items-center justify-center hover:bg-muted transition-colors" title="הגדרות">
+            <Settings className="w-4 h-4 text-muted-foreground" />
+          </Link>
+        </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-8">
@@ -88,6 +94,9 @@ export default function Home() {
             ))}
           </div>
         </section>
+
+        {/* Ready-Made Announcements */}
+        <ReadyMadeAnnouncements />
 
         {/* Recent Templates */}
         <section>

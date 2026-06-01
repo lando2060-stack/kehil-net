@@ -19,6 +19,7 @@ import Community from '@/pages/Community';
 import AdminCategories from '@/pages/AdminCategories';
 import AdminUsers from '@/pages/AdminUsers';
 import Login from '@/pages/Login';
+import Profile from '@/pages/Profile';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, authError, navigateToLogin } = useAuth();
@@ -57,6 +58,7 @@ const AuthenticatedApp = () => {
         <Route path="/backgrounds" element={<Backgrounds />} />
         <Route path="/community" element={<Community />} />
         <Route path="/admin-categories" element={<AdminCategories />} />
+        <Route path="/profile" element={<Profile />} />
       </Route>
       <Route path="/admin-manage" element={<AdminManage />} />
       <Route path="/admin-users" element={<AdminUsers />} />

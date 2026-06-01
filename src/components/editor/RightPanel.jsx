@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
-  FileText, Image, Type, Shapes, BookMarked, Palette, Check,
+  FileText, Image, Type, Shapes, BookMarked, Palette, Check, Search,
   Loader2, Plus, Minus, Bold, AlignRight, AlignCenter, AlignLeft, Trash2,
   Sparkles, Settings2, RectangleVertical, RectangleHorizontal,
 } from 'lucide-react';
@@ -770,12 +770,3 @@ function ElementsTab({ onAddText }) {
   );
 }
 
-// need Search as component
-function Search(props) {
-  const { className, ...rest } = props;
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...rest}>
-      <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-    </svg>
-  );
-}

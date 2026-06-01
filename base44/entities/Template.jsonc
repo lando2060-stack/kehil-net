@@ -1,0 +1,74 @@
+{
+  "name": "Template",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Template name"
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Category tags for this template"
+    },
+    "background_url": {
+      "type": "string",
+      "description": "Background image URL (transparent or with layout)"
+    },
+    "thumbnail_url": {
+      "type": "string",
+      "description": "Thumbnail preview"
+    },
+    "text_elements": {
+      "type": "array",
+      "description": "Array of text elements with position, style, content",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "width": {
+            "type": "number"
+          },
+          "fontSize": {
+            "type": "number"
+          },
+          "fontFamily": {
+            "type": "string"
+          },
+          "fontWeight": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          },
+          "textAlign": {
+            "type": "string"
+          },
+          "lineHeight": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "is_shared": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

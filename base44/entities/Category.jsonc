@@ -1,0 +1,21 @@
+{
+  "name": "Category",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Category name (e.g. \u05d1\u05e8\u05db\u05ea \u05ea\u05d5\u05d3\u05d4, \u05d1\u05d3\u05e7 \u05d4\u05d1\u05d9\u05ea, \u05e9\u05d1\u05d5\u05e2\u05d5\u05ea)"
+    },
+    "icon": {
+      "type": "string",
+      "description": "Icon name from lucide"
+    },
+    "order": {
+      "type": "number",
+      "description": "Display order"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

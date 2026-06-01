@@ -1,0 +1,36 @@
+{
+  "name": "Background",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Background/frame name"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "URL of the background/frame image"
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Category tags for this background"
+    },
+    "is_shared": {
+      "type": "boolean",
+      "default": true
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Search tags"
+    }
+  },
+  "required": [
+    "name",
+    "image_url"
+  ]
+}

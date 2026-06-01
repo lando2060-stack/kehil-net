@@ -1,0 +1,119 @@
+{
+  "name": "Announcement",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Announcement title"
+    },
+    "template_id": {
+      "type": "string",
+      "description": "Template used as base"
+    },
+    "category": {
+      "type": "string",
+      "description": "Category"
+    },
+    "background_url": {
+      "type": "string",
+      "description": "Background image URL"
+    },
+    "text_elements": {
+      "type": "array",
+      "description": "Text elements with styling and position",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "width": {
+            "type": "number"
+          },
+          "fontSize": {
+            "type": "number"
+          },
+          "fontFamily": {
+            "type": "string"
+          },
+          "fontWeight": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          },
+          "textAlign": {
+            "type": "string"
+          },
+          "lineHeight": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "logo_url": {
+      "type": "string",
+      "description": "Synagogue logo URL"
+    },
+    "logo_position": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        }
+      }
+    },
+    "canvas_width": {
+      "type": "number",
+      "default": 595
+    },
+    "canvas_height": {
+      "type": "number",
+      "default": 842
+    },
+    "orientation": {
+      "type": "string",
+      "enum": [
+        "portrait",
+        "landscape"
+      ],
+      "default": "portrait",
+      "description": "Page orientation"
+    },
+    "is_shared": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether shared with the community"
+    },
+    "is_draft": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this is a draft"
+    },
+    "synagogue_name": {
+      "type": "string",
+      "description": "Name of the synagogue"
+    }
+  },
+  "required": [
+    "title"
+  ]
+}

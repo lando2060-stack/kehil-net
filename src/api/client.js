@@ -173,7 +173,7 @@ export const apiClient = {
       },
 
       InvokeLLM: async (params) => {
-        const { data, error } = await supabase.functions.invoke('ai-generate', { body: params });
+        const { data, error } = await supabase.functions.invoke('ai-generat', { body: params });
         if (error) throw error;
         return data;
       },
